@@ -112,12 +112,33 @@ const authRequired = async (req, res, next) => {
   }
 }
 
+// CORS: Allow localhost in development, specific origins in production
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',')
+  : []
+
 const isAllowedOrigin = (origin) => {
   if (!origin) {
+    return true // Allow requests without origin (like mobile apps, curl, etc.)
+  }
+
+  // Development: allow localhost variants
+  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
     return true
   }
 
-  return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
+  // Production: check ALLOWED_ORIGINS env var
+  if (ALLOWED_ORIGINS.length > 0) {
+    return ALLOWED_ORIGINS.some((allowed) => {
+      // Support wildcards: example.com* matches example.com and subdomain.example.com
+      const regexPattern = allowed
+        .replace(/\./g, '\\.')
+        .replace(/\*/g, '.*')
+      return new RegExp(`^https?:\/\/${regexPattern}(:\d+)?$`).test(origin)
+    })
+  }
+
+  return false
 }
 
 app.use(
@@ -128,8 +149,10 @@ app.use(
         return
       }
 
+      console.warn(`CORS blocked origin: ${origin}`)
       callback(new Error('CORS origin not allowed'))
     },
+    credentials: true,
   }),
 )
 app.use(express.json())

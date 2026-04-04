@@ -1,7 +1,23 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import './App.css'
 
-const API_URL = `${import.meta.env.VITE_API_URL ?? 'http://localhost:4000'}/api`
+// API URL: Use VITE_API_URL env var, or derive from current origin
+const getApiUrl = () => {
+  if (import.meta.env.VITE_API_URL) {
+    return `${import.meta.env.VITE_API_URL}/api`
+  }
+  
+  // Fallback: if deployed, use same origin; otherwise use localhost
+  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    // Production: use same origin with API port (or assume relative path)
+    return `${window.location.protocol}//${window.location.host}/api`
+  }
+  
+  // Development: use localhost:4000
+  return 'http://localhost:4000/api'
+}
+
+const API_URL = getApiUrl()
 const TOKEN_KEY = 'task-management.auth.token'
 
 const formatDueDate = (value) => {
@@ -289,7 +305,7 @@ function App() {
       }
     }
 
-    
+
     void submit()
   }
 
