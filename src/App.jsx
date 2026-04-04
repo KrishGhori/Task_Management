@@ -20,6 +20,27 @@ const getApiUrl = () => {
 const API_URL = getApiUrl()
 const TOKEN_KEY = 'task-management.auth.token'
 
+const parseJsonResponse = async (response) => {
+  const contentType = response.headers.get('content-type') ?? ''
+  const bodyText = await response.text()
+
+  if (!bodyText) {
+    return null
+  }
+
+  if (!contentType.toLowerCase().includes('application/json')) {
+    throw new Error(
+      'Server returned non-JSON response. Set VITE_API_URL to your deployed backend URL.',
+    )
+  }
+
+  try {
+    return JSON.parse(bodyText)
+  } catch {
+    throw new Error('Server returned invalid JSON response.')
+  }
+}
+
 const formatDueDate = (value) => {
   if (!value) {
     return 'No due date'
@@ -112,6 +133,15 @@ function App() {
         throw new Error('Session expired. Please sign in again.')
       }
 
+      if (!response.ok) {
+        const errorPayload = await parseJsonResponse(response).catch(() => null)
+        const message =
+          errorPayload && typeof errorPayload.message === 'string'
+            ? errorPayload.message
+            : `Request failed with status ${response.status}.`
+        throw new Error(message)
+      }
+
       return response
     },
     [token],
@@ -126,11 +156,7 @@ function App() {
     setLoading(true)
     try {
       const response = await authedFetch('/tasks')
-      if (!response.ok) {
-        throw new Error('Unable to load tasks from server.')
-      }
-
-      const data = await response.json()
+      const data = await parseJsonResponse(response)
       setTasks(data)
       setMessage('')
     } catch (error) {
@@ -147,11 +173,7 @@ function App() {
 
     try {
       const response = await authedFetch('/users')
-      if (!response.ok) {
-        throw new Error('Unable to load users.')
-      }
-
-      const data = await response.json()
+      const data = await parseJsonResponse(response)
       setUsers(data)
     } catch {
       setUsers([])
@@ -165,11 +187,7 @@ function App() {
 
     try {
       const response = await authedFetch('/auth/me')
-      if (!response.ok) {
-        throw new Error('Unable to verify session.')
-      }
-
-      const data = await response.json()
+      const data = await parseJsonResponse(response)
       setUser(data.user)
       setMessage('')
     } catch (error) {
@@ -275,9 +293,9 @@ function App() {
           body: JSON.stringify(payload),
         })
 
-        const data = await response.json()
+        const data = await parseJsonResponse(response)
         if (!response.ok) {
-          throw new Error(data.message ?? 'Authentication failed.')
+          throw new Error(data?.message ?? 'Authentication failed.')
         }
 
         if (authMode === 'register') {
@@ -339,11 +357,7 @@ function App() {
           }),
         })
 
-        if (!response.ok) {
-          throw new Error('Unable to create task.')
-        }
-
-        const created = await response.json()
+        const created = await parseJsonResponse(response)
         setTasks((previous) => [created, ...previous])
         setDraft('')
         setDraftDueDate('')
@@ -369,11 +383,7 @@ function App() {
           body: JSON.stringify({ status }),
         })
 
-        if (!response.ok) {
-          throw new Error('Unable to update task status.')
-        }
-
-        const updated = await response.json()
+        const updated = await parseJsonResponse(response)
         setTasks((previous) => previous.map((task) => (task.id === id ? updated : task)))
         setMessage('')
       } catch (error) {
@@ -456,11 +466,8 @@ function App() {
             assigneeId: editingAssigneeId || null,
           }),
         })
-        if (!response.ok) {
-          throw new Error('Unable to save task.')
-        }
 
-        const updated = await response.json()
+        const updated = await parseJsonResponse(response)
         setTasks((previous) => previous.map((item) => (item.id === task.id ? updated : item)))
         setMessage('')
         cancelEdit()

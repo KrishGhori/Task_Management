@@ -114,49 +114,9 @@ const authRequired = async (req, res, next) => {
 
 // CORS: Allow localhost in development, specific origins in production
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',')
+  ? process.env.ALLOWED_ORIGINS.split(',').map((origin) => origin.trim().replace(/\/$/, ''))
   : []
 
-const isAllowedOrigin = (origin) => {
-  if (!origin) {
-    return true // Allow requests without origin (like mobile apps, curl, etc.)
-  }
-
-  // Development: allow localhost variants
-  if (/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
-    return true
-  }
-
-  // Production: check ALLOWED_ORIGINS env var
-  if (ALLOWED_ORIGINS.length > 0) {
-    return ALLOWED_ORIGINS.some((allowed) => {
-      // Support wildcards: example.com* matches example.com and subdomain.example.com
-      const regexPattern = allowed
-        .replace(/\./g, '\\.')
-        .replace(/\*/g, '.*')
-      return new RegExp(`^https?:\/\/${regexPattern}(:\d+)?$`).test(origin)
-    })
-  }
-
-  return false
-}
-
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (isAllowedOrigin(origin)) {
-        callback(null, true)
-        return
-      }
-
-      const err = new Error(`CORS origin not allowed: ${origin}`)
-      console.warn(err.message)
-      callback(err)
-    },
-    credentials: true,
-  }),
-)
-// CORS: Allow localhost in development, specific origins in production
 const corsOptions = {
   origin: (origin, callback) => {
     // Always allow requests without origin or localhost in development
@@ -165,13 +125,18 @@ const corsOptions = {
       return
     }
 
+    const normalizedOrigin = origin.replace(/\/$/, '')
+
     // Production: check ALLOWED_ORIGINS env var
     if (ALLOWED_ORIGINS.length > 0) {
       const isAllowed = ALLOWED_ORIGINS.some((allowed) => {
+        if (!allowed.includes('*')) {
+          return allowed === normalizedOrigin
+        }
         const regexPattern = allowed
           .replace(/\./g, '\\.')
           .replace(/\*/g, '.*')
-        return new RegExp(`^https?:\/\/${regexPattern}(:\d+)?$`).test(origin)
+        return new RegExp(`^https?:\/\/${regexPattern}(:\d+)?$`).test(normalizedOrigin)
       })
       if (isAllowed) {
         callback(null, true)
