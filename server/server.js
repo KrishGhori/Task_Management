@@ -149,12 +149,58 @@ app.use(
         return
       }
 
-      console.warn(`CORS blocked origin: ${origin}`)
-      callback(new Error('CORS origin not allowed'))
+      const err = new Error(`CORS origin not allowed: ${origin}`)
+      console.warn(err.message)
+      callback(err)
     },
     credentials: true,
   }),
 )
+// CORS: Allow localhost in development, specific origins in production
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Always allow requests without origin or localhost in development
+    if (!origin || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+      callback(null, true)
+      return
+    }
+
+    // Production: check ALLOWED_ORIGINS env var
+    if (ALLOWED_ORIGINS.length > 0) {
+      const isAllowed = ALLOWED_ORIGINS.some((allowed) => {
+        const regexPattern = allowed
+          .replace(/\./g, '\\.')
+          .replace(/\*/g, '.*')
+        return new RegExp(`^https?:\/\/${regexPattern}(:\d+)?$`).test(origin)
+      })
+      if (isAllowed) {
+        callback(null, true)
+        return
+      }
+    }
+
+    console.warn(`CORS rejected: ${origin}`)
+    callback(new Error('CORS not allowed'))
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}
+
+app.use(cors(corsOptions))
+
+// Debug: Log all incoming requests
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api')) {
+    console.log(
+      `[${new Date().toISOString()}] ${req.method} ${req.path} - Origin: ${req.get(
+        'origin',
+      ) || 'none'}`,
+    )
+  }
+  next()
+})
+
 app.use(express.json())
 
 app.get('/api/health', (_req, res) => {
