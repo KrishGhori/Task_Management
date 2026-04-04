@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Task Management Web
 
 Full-stack task manager built with React + Vite (frontend) and Express + MongoDB (backend).
@@ -76,3 +77,6 @@ Protected routes require an `Authorization: Bearer <token>` header.
 ```bash
 npm run build
 ```
+=======
+# Task_managment
+>>>>>>> c946724752b4b22e14e3cbcfb0d83cb42eb4f136
