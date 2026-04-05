@@ -86,6 +86,8 @@ Access the app at: `https://yourdomain.com`
    VITE_API_URL=https://api.yourdomain.com
    ```
 
+If your deployment URL already ends with `/api`, the frontend will normalize it automatically.
+
 ### Backend (Heroku, Railway, Render, DigitalOcean, etc.)
 
 Deploy the entire app directory and set environment variables:
@@ -143,6 +145,8 @@ docker push your-registry/task-management
 2. Check backend is running and accessible from frontend domain
 3. Use browser DevTools Network tab to see the blocked request
 4. Verify API URL in frontend matches your backend deployment
+
+If you set `VITE_API_URL`, use the backend origin you actually deployed, not the frontend origin.
 
 ### "Cannot GET /" error
 

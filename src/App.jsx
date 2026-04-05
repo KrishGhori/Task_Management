@@ -2,9 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import './App.css'
 
 // API URL: Use VITE_API_URL env var, or derive from current origin
+const normalizeApiBaseUrl = (value) => {
+  const trimmed = value.trim().replace(/\/+$/, '')
+  return trimmed.endsWith('/api') ? trimmed.slice(0, -4) : trimmed
+}
+
 const getApiUrl = () => {
   if (import.meta.env.VITE_API_URL) {
-    return `${import.meta.env.VITE_API_URL}/api`
+    return `${normalizeApiBaseUrl(import.meta.env.VITE_API_URL)}/api`
   }
   
   // Fallback: if deployed, use same origin; otherwise use localhost
@@ -30,7 +35,7 @@ const parseJsonResponse = async (response) => {
 
   if (!contentType.toLowerCase().includes('application/json')) {
     throw new Error(
-      'Server returned non-JSON response. Set VITE_API_URL to your deployed backend URL.',
+      `Server returned non-JSON response from ${response.url || 'the API'}. Set VITE_API_URL to your deployed backend URL.`,
     )
   }
 

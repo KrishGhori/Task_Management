@@ -85,7 +85,7 @@ ALLOWED_ORIGINS=https://myapp.com,https://www.myapp.com
 VITE_API_URL=https://api.yourdomain.com
 ```
 
-In development, defaults to `http://localhost:4000`. In production, uses the same origin.
+In development, defaults to `http://localhost:4000`. In production, set `VITE_API_URL` to your backend origin; the client appends `/api` automatically.
 
 ## API Endpoints
 
