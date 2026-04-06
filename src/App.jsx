@@ -112,6 +112,7 @@ function App() {
   const [authPassword, setAuthPassword] = useState('')
   const [authLoading, setAuthLoading] = useState(false)
   const [showHomePage, setShowHomePage] = useState(true)
+  const [activeView, setActiveView] = useState('tasks')
 
   const authedFetch = useCallback(
     async (path, init) => {
@@ -272,6 +273,45 @@ function App() {
 
   const completedCount = tasks.filter((task) => task.status === 'completed').length
   const activeCount = tasks.length - completedCount
+  const assignedCount = tasks.filter((task) => task.assigneeId === user?.id).length
+
+  const overdueCount = useMemo(
+    () =>
+      tasks.filter((task) => {
+        if (!task.dueDate || task.status === 'completed') {
+          return false
+        }
+        const due = new Date(task.dueDate).getTime()
+        return !Number.isNaN(due) && due < Date.now()
+      }).length,
+    [tasks],
+  )
+
+  const dueTodayCount = useMemo(() => {
+    const today = new Date()
+    return tasks.filter((task) => {
+      if (!task.dueDate || task.status === 'completed') {
+        return false
+      }
+      const due = new Date(task.dueDate)
+      return (
+        due.getFullYear() === today.getFullYear() &&
+        due.getMonth() === today.getMonth() &&
+        due.getDate() === today.getDate()
+      )
+    }).length
+  }, [tasks])
+
+  const completionRate = tasks.length > 0 ? Math.round((completedCount / tasks.length) * 100) : 0
+
+  const userInitial = useMemo(() => {
+    if (!user?.name) {
+      return 'U'
+    }
+    return user.name.trim().charAt(0).toUpperCase()
+  }, [user?.name])
+
+  const recentTasks = useMemo(() => tasks.slice(0, 5), [tasks])
 
   const getUserName = (id) => {
     if (!id) {
@@ -338,6 +378,7 @@ function App() {
     setUser(null)
     setTasks([])
     setShowHomePage(true)
+    setActiveView('tasks')
     setMessage('Signed out.')
   }
 
@@ -436,6 +477,11 @@ function App() {
   }
 
   const startEdit = (task) => {
+    if (task.status === 'completed') {
+      setMessage('Completed tasks cannot be changed.')
+      return
+    }
+
     setEditingId(task.id)
     setEditingTitle(task.title)
     setEditingDueDate(task.dueDate ?? '')
@@ -454,6 +500,12 @@ function App() {
   }
 
   const saveEdit = (task) => {
+    if (task.status === 'completed') {
+      setMessage('Completed tasks cannot be changed.')
+      cancelEdit()
+      return
+    }
+
     const title = editingTitle.trim()
     if (!title) {
       return
@@ -579,254 +631,351 @@ function App() {
         <section className="card">
           <div className="top-row">
             <p className="welcome">Signed in as {user.name}</p>
-            <button type="button" className="ghost" onClick={onLogout}>
-              Logout
-            </button>
-          </div>
-
-          {notifications.length > 0 ? (
-            <section className="notification-panel" aria-label="Notifications">
-              {notifications.map((note) => (
-                <p key={note}>{note}</p>
-              ))}
-            </section>
-          ) : null}
-
-          <form className="task-form" onSubmit={onCreateTask}>
-            <label htmlFor="task-input" className="sr-only">
-              New task
-            </label>
-            <input
-              id="task-input"
-              type="text"
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              placeholder="Add a task"
-              maxLength={120}
-            />
-            <input
-              type="date"
-              value={draftDueDate}
-              onChange={(event) => setDraftDueDate(event.target.value)}
-              aria-label="Due date"
-            />
-            <select
-              value={draftPriority}
-              onChange={(event) => setDraftPriority(event.target.value)}
-              aria-label="Priority"
-            >
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-            </select>
-            <select
-              value={draftStatus}
-              onChange={(event) => setDraftStatus(event.target.value)}
-              aria-label="Status"
-            >
-              <option value="pending">Pending</option>
-              <option value="in_progress">In Progress</option>
-              <option value="completed">Completed</option>
-            </select>
-            <select
-              value={draftAssigneeId}
-              onChange={(event) => setDraftAssigneeId(event.target.value)}
-              aria-label="Assignee"
-            >
-              <option value="">Unassigned</option>
-              {users.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
-            <button type="submit" disabled={isSaving}>
-              {isSaving ? 'Adding...' : 'Add Task'}
-            </button>
-          </form>
-
-          <div className="toolbar filters-wrap">
-            <input
-              type="search"
-              className="search-input"
-              placeholder="Search tasks"
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              aria-label="Search tasks"
-            />
-
-            <div className="filters" role="tablist" aria-label="Task status filter">
-              {['all', 'pending', 'in_progress', 'completed'].map((item) => (
-                <button
-                  key={item}
-                  type="button"
-                  role="tab"
-                  aria-selected={filter === item}
-                  className={filter === item ? 'active' : ''}
-                  onClick={() => setFilter(item)}
-                >
-                  {item === 'in_progress' ? 'in progress' : item}
-                </button>
-              ))}
+            <div className="top-actions">
+              <button
+                type="button"
+                className={`ghost ${activeView === 'tasks' ? 'active-nav' : ''}`}
+                onClick={() => setActiveView('tasks')}
+              >
+                Tasks
+              </button>
+              <button
+                type="button"
+                className={`ghost ${activeView === 'profile' ? 'active-nav' : ''}`}
+                onClick={() => setActiveView('profile')}
+              >
+                Profile
+              </button>
+              <button type="button" className="ghost" onClick={onLogout}>
+                Logout
+              </button>
             </div>
-
-            <select
-              value={priorityFilter}
-              onChange={(event) => setPriorityFilter(event.target.value)}
-              aria-label="Priority filter"
-            >
-              <option value="all">All priorities</option>
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-            </select>
-
-            <select
-              value={ownershipFilter}
-              onChange={(event) => setOwnershipFilter(event.target.value)}
-              aria-label="Ownership filter"
-            >
-              <option value="all">All tasks</option>
-              <option value="owned">Owned by me</option>
-              <option value="assigned">Assigned to me</option>
-            </select>
-
-            <button
-              type="button"
-              className="ghost"
-              onClick={clearCompleted}
-              disabled={completedCount === 0}
-            >
-              Clear Completed
-            </button>
           </div>
 
-          {message ? <p className="message">{message}</p> : null}
+          {activeView === 'profile' ? (
+            <section className="profile-view" aria-label="Profile page">
+              <header className="profile-header">
+                <div className="profile-avatar" aria-hidden="true">
+                  {userInitial}
+                </div>
+                <div>
+                  <h2>{user.name}</h2>
+                  <p>{user.email}</p>
+                </div>
+              </header>
 
-          <ul className="task-list">
-            {loading ? (
-              <li className="empty">Loading tasks...</li>
-            ) : filteredTasks.length === 0 ? (
-              <li className="empty">No tasks found for your current filters.</li>
-            ) : (
-              filteredTasks.map((task) => (
-                <li key={task.id} className={task.status === 'completed' ? 'done' : ''}>
-                  <button
-                    type="button"
-                    className={`status-chip ${task.status}`}
-                    onClick={() => updateTaskStatus(task.id, nextStatus(task.status))}
-                    aria-label={`Set next status for ${task.title}`}
-                  >
-                    {formatStatus(task.status)}
-                  </button>
+              <div className="profile-stats">
+                <article>
+                  <h3>Total Tasks</h3>
+                  <p>{tasks.length}</p>
+                </article>
+                <article>
+                  <h3>Completed</h3>
+                  <p>{completedCount}</p>
+                </article>
+                <article>
+                  <h3>Assigned To You</h3>
+                  <p>{assignedCount}</p>
+                </article>
+                <article>
+                  <h3>Completion Rate</h3>
+                  <p>{completionRate}%</p>
+                </article>
+              </div>
 
-                  {editingId === task.id ? (
-                    <div className="edit-panel">
-                      <input
-                        type="text"
-                        value={editingTitle}
-                        onChange={(event) => setEditingTitle(event.target.value)}
-                        maxLength={120}
-                      />
-                      <input
-                        type="date"
-                        value={editingDueDate}
-                        onChange={(event) => setEditingDueDate(event.target.value)}
-                      />
-                      <select
-                        value={editingPriority}
-                        onChange={(event) => setEditingPriority(event.target.value)}
-                      >
-                        <option value="low">Low</option>
-                        <option value="medium">Medium</option>
-                        <option value="high">High</option>
-                      </select>
-                      <select
-                        value={editingStatus}
-                        onChange={(event) => setEditingStatus(event.target.value)}
-                      >
-                        <option value="pending">Pending</option>
-                        <option value="in_progress">In Progress</option>
-                        <option value="completed">Completed</option>
-                      </select>
-                      <select
-                        value={editingAssigneeId}
-                        onChange={(event) => setEditingAssigneeId(event.target.value)}
-                      >
-                        <option value="">Unassigned</option>
-                        {users.map((item) => (
-                          <option key={item.id} value={item.id}>
-                            {item.name}
-                          </option>
-                        ))}
-                      </select>
-                      <div className="actions">
-                        <button type="button" className="save" onClick={() => saveEdit(task)}>
-                          Save
-                        </button>
-                        <button type="button" className="ghost" onClick={cancelEdit}>
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
+              <div className="profile-grid">
+                <article className="profile-panel">
+                  <h3>Account Summary</h3>
+                  <p>You are actively collaborating with your team across all priorities.</p>
+                  <ul>
+                    <li>Due today: {dueTodayCount}</li>
+                    <li>Overdue: {overdueCount}</li>
+                    <li>In progress: {tasks.filter((task) => task.status === 'in_progress').length}</li>
+                    <li>Pending: {tasks.filter((task) => task.status === 'pending').length}</li>
+                  </ul>
+                </article>
+
+                <article className="profile-panel">
+                  <h3>Recent Tasks</h3>
+                  {recentTasks.length === 0 ? (
+                    <p>No tasks yet. Add your first task from the Tasks tab.</p>
                   ) : (
-                    <>
-                      <div className="task-body">
-                        <span>{task.title}</span>
-                        <small>
-                          {formatDueDate(task.dueDate)} | {task.priority} priority | assignee: {getUserName(task.assigneeId)}
-                        </small>
-                      </div>
-
-                      <div className="actions">
-                        <button
-                          type="button"
-                          className="edit"
-                          onClick={() => startEdit(task)}
-                          disabled={task.ownerId !== user.id}
-                          title={task.ownerId !== user.id ? 'Only task owner can edit details' : 'Edit task'}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          type="button"
-                          className="delete"
-                          onClick={() => deleteTask(task.id)}
-                          disabled={task.ownerId !== user.id}
-                          title={task.ownerId !== user.id ? 'Only task owner can delete' : 'Delete task'}
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    </>
+                    <ul className="profile-recent-list">
+                      {recentTasks.map((task) => (
+                        <li key={task.id}>
+                          <span>{task.title}</span>
+                          <small>
+                            {formatStatus(task.status)} | {task.priority} | {formatDueDate(task.dueDate)}
+                          </small>
+                        </li>
+                      ))}
+                    </ul>
                   )}
-                </li>
-              ))
-            )}
-          </ul>
+                </article>
+              </div>
+            </section>
+          ) : (
+            <>
+              {notifications.length > 0 ? (
+                <section className="notification-panel" aria-label="Notifications">
+                  {notifications.map((note) => (
+                    <p key={note}>{note}</p>
+                  ))}
+                </section>
+              ) : null}
 
-          <footer className="status">
-            <p>
-              {activeCount} active, {completedCount} completed
-            </p>
-            <p>{tasks.length} total tasks</p>
-          </footer>
+              <form className="task-form" onSubmit={onCreateTask}>
+                <label htmlFor="task-input" className="sr-only">
+                  New task
+                </label>
+                <input
+                  id="task-input"
+                  type="text"
+                  value={draft}
+                  onChange={(event) => setDraft(event.target.value)}
+                  placeholder="Add a task"
+                  maxLength={120}
+                />
+                <input
+                  type="date"
+                  value={draftDueDate}
+                  onChange={(event) => setDraftDueDate(event.target.value)}
+                  aria-label="Due date"
+                />
+                <select
+                  value={draftPriority}
+                  onChange={(event) => setDraftPriority(event.target.value)}
+                  aria-label="Priority"
+                >
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                </select>
+                <select
+                  value={draftStatus}
+                  onChange={(event) => setDraftStatus(event.target.value)}
+                  aria-label="Status"
+                >
+                  <option value="pending">Pending</option>
+                  <option value="in_progress">In Progress</option>
+                  <option value="completed">Completed</option>
+                </select>
+                <select
+                  value={draftAssigneeId}
+                  onChange={(event) => setDraftAssigneeId(event.target.value)}
+                  aria-label="Assignee"
+                >
+                  <option value="" disabled hidden>
+                    Select assignee
+                  </option>
+                  {users.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                    </option>
+                  ))}
+                </select>
+                <button type="submit" disabled={isSaving}>
+                  {isSaving ? 'Adding...' : 'Add Task'}
+                </button>
+              </form>
 
-          <div className="mobile-actions" aria-label="Mobile quick actions">
-            <button type="button" className="ghost" onClick={() => setShowHomePage(true)}>
-              Home
-            </button>
-            <button
-              type="button"
-              className="primary"
-              onClick={() => document.getElementById('task-input')?.focus()}
-            >
-              Add Task
-            </button>
-            <button type="button" className="ghost" onClick={clearCompleted}>
-              Clear
-            </button>
-          </div>
+              <div className="toolbar filters-wrap">
+                <input
+                  type="search"
+                  className="search-input"
+                  placeholder="Search tasks"
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  aria-label="Search tasks"
+                />
+
+                <div className="filters" role="tablist" aria-label="Task status filter">
+                  {['all', 'pending', 'in_progress', 'completed'].map((item) => (
+                    <button
+                      key={item}
+                      type="button"
+                      role="tab"
+                      aria-selected={filter === item}
+                      className={filter === item ? 'active' : ''}
+                      onClick={() => setFilter(item)}
+                    >
+                      {item === 'in_progress' ? 'in progress' : item}
+                    </button>
+                  ))}
+                </div>
+
+                <select
+                  value={priorityFilter}
+                  onChange={(event) => setPriorityFilter(event.target.value)}
+                  aria-label="Priority filter"
+                >
+                  <option value="all">All priorities</option>
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                </select>
+
+                <select
+                  value={ownershipFilter}
+                  onChange={(event) => setOwnershipFilter(event.target.value)}
+                  aria-label="Ownership filter"
+                >
+                  <option value="all">All tasks</option>
+                  <option value="owned">Owned by me</option>
+                  <option value="assigned">Assigned to me</option>
+                </select>
+
+                <button
+                  type="button"
+                  className="ghost"
+                  onClick={clearCompleted}
+                  disabled={completedCount === 0}
+                >
+                  Clear Completed
+                </button>
+              </div>
+
+              {message ? <p className="message">{message}</p> : null}
+
+              <ul className="task-list">
+                {loading ? (
+                  <li className="empty">Loading tasks...</li>
+                ) : filteredTasks.length === 0 ? (
+                  <li className="empty">No tasks found for your current filters.</li>
+                ) : (
+                  filteredTasks.map((task) => (
+                    <li key={task.id} className={task.status === 'completed' ? 'done' : ''}>
+                      <button
+                        type="button"
+                        className={`status-chip ${task.status}`}
+                        onClick={() => {
+                          if (task.status !== 'completed') {
+                            updateTaskStatus(task.id, nextStatus(task.status))
+                          }
+                        }}
+                        disabled={task.status === 'completed'}
+                        aria-label={`Set next status for ${task.title}`}
+                      >
+                        {formatStatus(task.status)}
+                      </button>
+
+                      {editingId === task.id && task.status !== 'completed' ? (
+                        <div className="edit-panel">
+                          <input
+                            type="text"
+                            value={editingTitle}
+                            onChange={(event) => setEditingTitle(event.target.value)}
+                            maxLength={120}
+                          />
+                          <input
+                            type="date"
+                            value={editingDueDate}
+                            onChange={(event) => setEditingDueDate(event.target.value)}
+                          />
+                          <select
+                            value={editingPriority}
+                            onChange={(event) => setEditingPriority(event.target.value)}
+                          >
+                            <option value="low">Low</option>
+                            <option value="medium">Medium</option>
+                            <option value="high">High</option>
+                          </select>
+                          <select
+                            value={editingStatus}
+                            onChange={(event) => setEditingStatus(event.target.value)}
+                          >
+                            <option value="pending">Pending</option>
+                            <option value="in_progress">In Progress</option>
+                            <option value="completed">Completed</option>
+                          </select>
+                          <select
+                            value={editingAssigneeId}
+                            onChange={(event) => setEditingAssigneeId(event.target.value)}
+                          >
+                            <option value="" disabled hidden>
+                              Select assignee
+                            </option>
+                            {users.map((item) => (
+                              <option key={item.id} value={item.id}>
+                                {item.name}
+                              </option>
+                            ))}
+                          </select>
+                          <div className="actions">
+                            <button type="button" className="save" onClick={() => saveEdit(task)}>
+                              Save
+                            </button>
+                            <button type="button" className="ghost" onClick={cancelEdit}>
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="task-body">
+                            <span>{task.title}</span>
+                            <small>
+                              {formatDueDate(task.dueDate)} | {task.priority} priority | assignee: {getUserName(task.assigneeId)}
+                            </small>
+                          </div>
+
+                          <div className="actions">
+                            <button
+                              type="button"
+                              className="edit"
+                              onClick={() => startEdit(task)}
+                              disabled={task.ownerId !== user.id || task.status === 'completed'}
+                              title={
+                                task.status === 'completed'
+                                  ? 'Completed tasks cannot be changed'
+                                  : task.ownerId !== user.id
+                                    ? 'Only task owner can edit details'
+                                    : 'Edit task'
+                              }
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              className="delete"
+                              onClick={() => deleteTask(task.id)}
+                              disabled={task.ownerId !== user.id}
+                              title={task.ownerId !== user.id ? 'Only task owner can delete' : 'Delete task'}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </li>
+                  ))
+                )}
+              </ul>
+
+              <footer className="status">
+                <p>
+                  {activeCount} active, {completedCount} completed
+                </p>
+                <p>{tasks.length} total tasks</p>
+              </footer>
+
+              <div className="mobile-actions" aria-label="Mobile quick actions">
+                <button type="button" className="ghost" onClick={() => setShowHomePage(true)}>
+                  Home
+                </button>
+                <button
+                  type="button"
+                  className="primary"
+                  onClick={() => document.getElementById('task-input')?.focus()}
+                >
+                  Add Task
+                </button>
+                <button type="button" className="ghost" onClick={clearCompleted}>
+                  Clear
+                </button>
+              </div>
+            </>
+          )}
         </section>
       )}
 

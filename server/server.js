@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import cors from 'cors'
 import bcrypt from 'bcryptjs'
 import express from 'express'
@@ -136,7 +137,7 @@ const corsOptions = {
         const regexPattern = allowed
           .replace(/\./g, '\\.')
           .replace(/\*/g, '.*')
-        return new RegExp(`^https?:\/\/${regexPattern}(:\d+)?$`).test(normalizedOrigin)
+        return new RegExp(`^https?:\\/\\/${regexPattern}(?::\\d+)?$`).test(normalizedOrigin)
       })
       if (isAllowed) {
         callback(null, true)
@@ -321,6 +322,11 @@ app.put('/api/tasks/:id', authRequired, async (req, res) => {
   })
   if (!existing) {
     res.status(404).json({ message: 'Task not found.' })
+    return
+  }
+
+  if (existing.status === 'completed') {
+    res.status(403).json({ message: 'Completed tasks cannot be changed.' })
     return
   }
 
