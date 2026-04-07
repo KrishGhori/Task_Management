@@ -88,10 +88,6 @@ const formatRole = (role) => {
     return 'Admin'
   }
 
-  if (role === 'staff') {
-    return 'Staff'
-  }
-
   return 'Employee'
 }
 
@@ -337,12 +333,11 @@ function App() {
   const isAdmin = user?.role === 'admin'
 
   const assignableUsers = useMemo(
-    () => users.filter((item) => item.role === 'staff' || item.role === 'employee'),
+    () => users.filter((item) => item.role === 'employee'),
     [users],
   )
 
   const adminCount = users.filter((item) => item.role === 'admin').length
-  const staffCount = users.filter((item) => item.role === 'staff').length
   const employeeCount = users.filter((item) => item.role === 'employee').length
   const assignableCount = assignableUsers.length
 
@@ -891,7 +886,7 @@ function App() {
               <header className="admin-header">
                 <div>
                   <p className="kicker">Admin section</p>
-                  <h2>Assign work to staff and employees</h2>
+                  <h2>Assign work to employees</h2>
                   <p className="subtitle">
                     Only admins can assign tasks. Only employees can complete assigned work.
                   </p>
@@ -907,10 +902,6 @@ function App() {
                     <p>{adminCount}</p>
                   </article>
                   <article>
-                    <h3>Staff</h3>
-                    <p>{staffCount}</p>
-                  </article>
-                  <article>
                     <h3>Employees</h3>
                     <p>{employeeCount}</p>
                   </article>
@@ -920,7 +911,7 @@ function App() {
               <div className="profile-grid admin-grid">
                 <article className="profile-panel">
                   <h3>Team roles</h3>
-                  <p>Promote team members to staff or keep them as employees.</p>
+                  <p>This workspace supports only admin and employee roles.</p>
 
                   <ul className="team-list">
                     {users.map((item) => (
@@ -938,19 +929,11 @@ function App() {
                           <div className="team-actions">
                             <button
                               type="button"
-                              className={`ghost ${item.role === 'staff' ? 'active-nav' : ''}`}
-                              onClick={() => updateUserRole(item.id, 'staff')}
-                              disabled={roleSavingId === item.id || item.role === 'staff'}
-                            >
-                              Staff
-                            </button>
-                            <button
-                              type="button"
                               className={`ghost ${item.role === 'employee' ? 'active-nav' : ''}`}
                               onClick={() => updateUserRole(item.id, 'employee')}
                               disabled={roleSavingId === item.id || item.role === 'employee'}
                             >
-                              Employee
+                              Set as Employee
                             </button>
                           </div>
                         )}
@@ -961,7 +944,7 @@ function App() {
 
                 <article className="profile-panel">
                   <h3>Assign task</h3>
-                  <p>Use this form to assign work only to staff or employees.</p>
+                  <p>Use this form to assign work only to employees.</p>
 
                   <form className="task-form admin-task-form" onSubmit={onAdminCreateTask}>
                     <label htmlFor="admin-task-input" className="sr-only">
@@ -1005,7 +988,7 @@ function App() {
                       required
                     >
                       <option value="" disabled hidden>
-                        Select staff or employee
+                        Select employee
                       </option>
                       {assignableUsers.map((item) => (
                         <option key={item.id} value={item.id}>
@@ -1137,7 +1120,7 @@ function App() {
                     onChange={(event) => setDraftAssigneeId(event.target.value)}
                     aria-label="Assign to employee"
                   >
-                    <option value="">Assign to staff/employee (optional)</option>
+                    <option value="">Assign to employee (optional)</option>
                     {assignableUsers.map((item) => (
                       <option key={item.id} value={item.id}>
                         {item.name} ({formatRole(item.role)})

@@ -277,8 +277,16 @@
 }
 
 .admin-task-form {
-  grid-template-columns: minmax(220px, 2fr) repeat(4, minmax(120px, 1fr)) minmax(120px, auto);
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 0.7rem;
+}
+
+.admin-task-form input[type='text'] {
+  grid-column: 1 / -1;
+}
+
+.admin-task-form button {
+  grid-column: 1 / -1;
 }
 
 .toolbar {
@@ -468,10 +476,11 @@
 }
 
 .admin-stats {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .admin-grid {
+  grid-template-columns: 1fr;
   align-items: start;
 }
 
@@ -525,11 +534,6 @@
 .role-badge.admin {
   background: #f3e8ff;
   color: #7a2ea8;
-}
-
-.role-badge.staff {
-  background: #eef4ff;
-  color: #2450ba;
 }
 
 .role-badge.employee {
@@ -737,6 +741,10 @@
   }
 
   .profile-stats {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-stats {
     grid-template-columns: 1fr;
   }
 }
