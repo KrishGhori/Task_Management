@@ -4,11 +4,40 @@ import bcrypt from 'bcryptjs'
 import express from 'express'
 import jwt from 'jsonwebtoken'
 import mongoose from 'mongoose'
+import nodemailer from 'nodemailer'
+import { randomUUID } from 'node:crypto'
 
 const app = express()
 const PORT = Number(process.env.PORT ?? 4000)
 const JWT_SECRET = process.env.JWT_SECRET ?? 'task-management-dev-secret'
 const MONGODB_URI = process.env.MONGODB_URI ?? 'mongodb://127.0.0.1:27017/task_management_web'
+const ADMIN_EMAILS = new Set(
+  (process.env.ADMIN_EMAILS ?? '')
+    .split(',')
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean),
+)
+const OTP_EXPIRES_MS = Number(process.env.OTP_EXPIRES_MS ?? 5 * 60 * 1000)
+
+const smtpHost = process.env.SMTP_HOST
+const smtpPort = Number(process.env.SMTP_PORT ?? 587)
+const smtpUser = process.env.SMTP_USER
+const smtpPass = process.env.SMTP_PASS
+const smtpFrom = process.env.SMTP_FROM
+const mailTransporter =
+  smtpHost && smtpUser && smtpPass && smtpFrom
+    ? nodemailer.createTransport({
+        host: smtpHost,
+        port: smtpPort,
+        secure: process.env.SMTP_SECURE === 'true',
+        auth: {
+          user: smtpUser,
+          pass: smtpPass,
+        },
+      })
+    : null
+
+const otpChallenges = new Map()
 
 await mongoose.connect(MONGODB_URI)
 
@@ -17,6 +46,7 @@ const userSchema = new mongoose.Schema(
     name: { type: String, required: true, trim: true },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     passwordHash: { type: String, required: true },
+    role: { type: String, enum: ['admin', 'staff', 'employee'], default: 'employee' },
   },
   { timestamps: { createdAt: 'createdAt', updatedAt: false } },
 )
@@ -40,23 +70,29 @@ const taskSchema = new mongoose.Schema(
 const User = mongoose.model('User', userSchema)
 const Task = mongoose.model('Task', taskSchema)
 
-const parseTask = (task) => ({
-  id: task._id.toString(),
-  ownerId: task.userId.toString(),
-  assigneeId: task.assigneeId ? task.assigneeId.toString() : null,
-  title: task.title,
-  status: task.status ?? (task.done ? 'completed' : 'pending'),
-  done: (task.status ?? (task.done ? 'completed' : 'pending')) === 'completed',
-  dueDate: task.dueDate,
-  priority: task.priority,
-  createdAt: task.createdAt,
-  updatedAt: task.updatedAt,
-})
+const parseTask = (task) => {
+  const assignee = task.assigneeId && typeof task.assigneeId === 'object' ? task.assigneeId : null
+
+  return {
+    id: task._id.toString(),
+    ownerId: task.userId.toString(),
+    assigneeId: assignee ? assignee._id.toString() : task.assigneeId ? task.assigneeId.toString() : null,
+    assigneeRole: assignee?.role ?? null,
+    title: task.title,
+    status: task.status ?? (task.done ? 'completed' : 'pending'),
+    done: (task.status ?? (task.done ? 'completed' : 'pending')) === 'completed',
+    dueDate: task.dueDate,
+    priority: task.priority,
+    createdAt: task.createdAt,
+    updatedAt: task.updatedAt,
+  }
+}
 
 const parseUser = (user) => ({
   id: user._id.toString(),
   name: user.name,
   email: user.email,
+  role: user.role ?? 'employee',
 })
 
 const isValidPriority = (priority) =>
@@ -64,6 +100,8 @@ const isValidPriority = (priority) =>
 
 const isValidStatus = (status) =>
   status === 'pending' || status === 'in_progress' || status === 'completed'
+
+const isAssignableRole = (role) => role === 'staff' || role === 'employee'
 
 const normalizeAssigneeId = (assigneeId) => {
   if (assigneeId === undefined) {
@@ -86,6 +124,36 @@ const createToken = (user) =>
     expiresIn: '7d',
   })
 
+const generateOtp = () => `${Math.floor(100000 + Math.random() * 900000)}`
+
+const clearExpiredOtpChallenges = () => {
+  const now = Date.now()
+  for (const [challengeId, challenge] of otpChallenges.entries()) {
+    if (challenge.expiresAt <= now) {
+      otpChallenges.delete(challengeId)
+    }
+  }
+}
+
+const otpCleanupTimer = setInterval(clearExpiredOtpChallenges, 60 * 1000)
+otpCleanupTimer.unref()
+
+const sendOtpEmail = async ({ to, code, name }) => {
+  if (!mailTransporter) {
+    throw new Error(
+      'Email service is not configured. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, and SMTP_FROM.',
+    )
+  }
+
+  await mailTransporter.sendMail({
+    from: smtpFrom,
+    to,
+    subject: 'Your login OTP code',
+    text: `Hello ${name},\n\nYour OTP code is ${code}. It expires in 5 minutes.\n\nIf you did not request this login, ignore this email.`,
+    html: `<p>Hello ${name},</p><p>Your OTP code is <strong>${code}</strong>.</p><p>This code expires in 5 minutes.</p><p>If you did not request this login, ignore this email.</p>`,
+  })
+}
+
 const authRequired = async (req, res, next) => {
   const authHeader = req.headers.authorization
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -96,7 +164,7 @@ const authRequired = async (req, res, next) => {
   const token = authHeader.slice('Bearer '.length)
   try {
     const payload = jwt.verify(token, JWT_SECRET)
-    const user = await User.findById(payload.userId).select('name email').lean()
+    const user = await User.findById(payload.userId).select('name email role').lean()
     if (!user) {
       res.status(401).json({ message: 'Invalid token user.' })
       return
@@ -106,6 +174,7 @@ const authRequired = async (req, res, next) => {
       id: user._id.toString(),
       name: user.name,
       email: user.email,
+      role: user.role ?? 'employee',
     }
     next()
   } catch {
@@ -192,6 +261,12 @@ app.post('/api/auth/register', async (req, res) => {
   }
 
   const normalizedEmail = email.trim().toLowerCase()
+
+  if (ADMIN_EMAILS.has(normalizedEmail)) {
+    res.status(403).json({ message: 'Admin accounts must be created manually.' })
+    return
+  }
+
   const existing = await User.findOne({ email: normalizedEmail }).select('_id').lean()
   if (existing) {
     res.status(409).json({ message: 'Email is already registered.' })
@@ -203,17 +278,15 @@ app.post('/api/auth/register', async (req, res) => {
     name: name.trim(),
     email: normalizedEmail,
     passwordHash,
+    role: 'employee',
   })
-  const user = parseUser(created)
-  const token = createToken(user)
-
   res.status(201).json({
-    token,
-    user,
+    user: parseUser(created),
+    message: 'Employee account created. Continue with OTP login.',
   })
 })
 
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login/request-otp', async (req, res) => {
   const { email, password } = req.body ?? {}
 
   if (typeof email !== 'string' || typeof password !== 'string') {
@@ -234,7 +307,80 @@ app.post('/api/auth/login', async (req, res) => {
     return
   }
 
-  const user = { id: userRow._id.toString(), name: userRow.name, email: userRow.email }
+  const isAdmin = (userRow.role ?? 'employee') === 'admin'
+  if (isAdmin) {
+    const user = parseUser(userRow)
+    const token = createToken(user)
+    res.json({
+      token,
+      user,
+      message: 'Admin login successful.',
+    })
+    return
+  }
+
+  clearExpiredOtpChallenges()
+
+  const challengeId = randomUUID()
+  const otpCode = generateOtp()
+
+  otpChallenges.set(challengeId, {
+    challengeId,
+    userId: userRow._id.toString(),
+    code: otpCode,
+    expiresAt: Date.now() + OTP_EXPIRES_MS,
+  })
+
+  try {
+    await sendOtpEmail({
+      to: userRow.email,
+      code: otpCode,
+      name: userRow.name,
+    })
+  } catch (error) {
+    otpChallenges.delete(challengeId)
+    res.status(500).json({
+      message: error instanceof Error ? error.message : 'Unable to send OTP email.',
+    })
+    return
+  }
+
+  res.json({
+    challengeId,
+    message: 'OTP sent to your email. Verify to complete login.',
+  })
+})
+
+app.post('/api/auth/login/verify-otp', async (req, res) => {
+  const { challengeId, otp } = req.body ?? {}
+
+  if (typeof challengeId !== 'string' || typeof otp !== 'string') {
+    res.status(400).json({ message: 'Challenge id and OTP are required.' })
+    return
+  }
+
+  clearExpiredOtpChallenges()
+  const challenge = otpChallenges.get(challengeId)
+
+  if (!challenge) {
+    res.status(400).json({ message: 'OTP challenge expired or invalid. Please request a new code.' })
+    return
+  }
+
+  if (challenge.code !== otp.trim()) {
+    res.status(401).json({ message: 'Incorrect OTP.' })
+    return
+  }
+
+  const userRow = await User.findById(challenge.userId).lean()
+  otpChallenges.delete(challengeId)
+
+  if (!userRow) {
+    res.status(401).json({ message: 'Invalid account for this OTP challenge.' })
+    return
+  }
+
+  const user = parseUser(userRow)
   const token = createToken(user)
 
   res.json({ token, user })
@@ -245,7 +391,7 @@ app.get('/api/auth/me', authRequired, async (req, res) => {
 })
 
 app.get('/api/users', authRequired, async (_req, res) => {
-  const users = await User.find().sort({ name: 1 }).select('name email').lean()
+  const users = await User.find().sort({ name: 1 }).select('name email role').lean()
   res.json(users.map(parseUser))
 })
 
@@ -254,11 +400,17 @@ app.get('/api/tasks', authRequired, async (req, res) => {
     $or: [{ userId: req.user.id }, { assigneeId: req.user.id }],
   })
     .sort({ createdAt: -1 })
+    .populate('assigneeId', 'name email role')
     .lean()
   res.json(tasks.map(parseTask))
 })
 
 app.post('/api/tasks', authRequired, async (req, res) => {
+  if (req.user.role !== 'admin') {
+    res.status(403).json({ message: 'Only admins can create tasks.' })
+    return
+  }
+
   const {
     title,
     dueDate = null,
@@ -288,10 +440,20 @@ app.post('/api/tasks', authRequired, async (req, res) => {
     return
   }
 
+  if (normalizedAssigneeId !== undefined && req.user.role !== 'admin') {
+    res.status(403).json({ message: 'Only admins can assign tasks.' })
+    return
+  }
+
   if (normalizedAssigneeId) {
-    const assigneeExists = await User.exists({ _id: normalizedAssigneeId })
-    if (!assigneeExists) {
+    const assignee = await User.findById(normalizedAssigneeId).select('role').lean()
+    if (!assignee) {
       res.status(400).json({ message: 'Assignee user not found.' })
+      return
+    }
+
+    if (!isAssignableRole(assignee.role)) {
+      res.status(400).json({ message: 'Tasks can only be assigned to staff or employees.' })
       return
     }
   }
@@ -305,6 +467,7 @@ app.post('/api/tasks', authRequired, async (req, res) => {
     priority,
   })
 
+  await task.populate('assigneeId', 'name email role')
   res.status(201).json(parseTask(task))
 })
 
@@ -366,12 +529,17 @@ app.put('/api/tasks/:id', authRequired, async (req, res) => {
     return
   }
 
+  if (req.body?.assigneeId !== undefined && req.user.role !== 'admin') {
+    res.status(403).json({ message: 'Only admins can reassign tasks.' })
+    return
+  }
+
   if (!isOwner) {
     const ownerOnlyFieldsUpdated =
       req.body?.title !== undefined ||
       req.body?.dueDate !== undefined ||
       req.body?.priority !== undefined ||
-      req.body?.assigneeId !== undefined
+      (req.body?.assigneeId !== undefined && req.user.role !== 'admin')
 
     if (ownerOnlyFieldsUpdated) {
       res.status(403).json({ message: 'Only task owner can edit title, due date, priority, or assignee.' })
@@ -379,10 +547,28 @@ app.put('/api/tasks/:id', authRequired, async (req, res) => {
     }
   }
 
-  if (isOwner && normalizedAssigneeId !== undefined && normalizedAssigneeId !== null) {
-    const assigneeExists = await User.exists({ _id: normalizedAssigneeId })
-    if (!assigneeExists) {
+  if ((isOwner || req.user.role === 'admin') && normalizedAssigneeId !== undefined && normalizedAssigneeId !== null) {
+    const assignee = await User.findById(normalizedAssigneeId).select('role').lean()
+    if (!assignee) {
       res.status(400).json({ message: 'Assignee user not found.' })
+      return
+    }
+
+    if (!isAssignableRole(assignee.role)) {
+      res.status(400).json({ message: 'Tasks can only be assigned to staff or employees.' })
+      return
+    }
+  }
+
+  if (nextStatus === 'completed') {
+    if (!existing.assigneeId || existing.assigneeId.toString() !== req.user.id || req.user.role !== 'employee') {
+      res.status(403).json({ message: 'Only the assigned employee can complete this task.' })
+      return
+    }
+
+    const assignee = await User.findById(existing.assigneeId).select('role').lean()
+    if (!assignee || assignee.role !== 'employee') {
+      res.status(403).json({ message: 'Only the assigned employee can complete this task.' })
       return
     }
   }
@@ -391,11 +577,42 @@ app.put('/api/tasks/:id', authRequired, async (req, res) => {
   existing.status = nextStatus
   existing.dueDate = nextDueDate
   existing.priority = nextPriority
-  if (isOwner && normalizedAssigneeId !== undefined) {
+  if ((isOwner || req.user.role === 'admin') && normalizedAssigneeId !== undefined) {
     existing.assigneeId = normalizedAssigneeId
   }
   const updated = await existing.save()
+  await updated.populate('assigneeId', 'name email role')
   res.json(parseTask(updated))
+})
+
+app.put('/api/users/:id/role', authRequired, async (req, res) => {
+  if (req.user.role !== 'admin') {
+    res.status(403).json({ message: 'Only admins can manage user roles.' })
+    return
+  }
+
+  const userId = req.params.id
+  const nextRole = req.body?.role
+
+  if (!mongoose.isValidObjectId(userId)) {
+    res.status(400).json({ message: 'Invalid user id.' })
+    return
+  }
+
+  if (!isAssignableRole(nextRole)) {
+    res.status(400).json({ message: 'Role must be staff or employee.' })
+    return
+  }
+
+  const user = await User.findById(userId)
+  if (!user) {
+    res.status(404).json({ message: 'User not found.' })
+    return
+  }
+
+  user.role = nextRole
+  const updated = await user.save()
+  res.json(parseUser(updated))
 })
 
 app.delete('/api/tasks/:id', authRequired, async (req, res) => {

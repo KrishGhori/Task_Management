@@ -268,6 +268,15 @@
 
 .task-form {
   display: grid;
+  grid-template-columns: minmax(220px, 2fr) repeat(3, minmax(120px, 1fr)) minmax(120px, auto);
+  gap: 0.7rem;
+}
+
+.task-form-admin {
+  grid-template-columns: minmax(220px, 2fr) repeat(4, minmax(120px, 1fr)) minmax(120px, auto);
+}
+
+.admin-task-form {
   grid-template-columns: minmax(220px, 2fr) repeat(4, minmax(120px, 1fr)) minmax(120px, auto);
   gap: 0.7rem;
 }
@@ -447,6 +456,93 @@
   gap: 0.75rem;
 }
 
+.admin-view {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.admin-header {
+  display: grid;
+  gap: 0.85rem;
+  align-items: start;
+}
+
+.admin-stats {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.admin-grid {
+  align-items: start;
+}
+
+.team-list {
+  margin: 0.7rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.team-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fcfbf8;
+  padding: 0.7rem;
+}
+
+.team-row strong {
+  display: block;
+}
+
+.team-row small {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--muted);
+}
+
+.team-actions {
+  display: flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.role-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.18rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.role-badge.admin {
+  background: #f3e8ff;
+  color: #7a2ea8;
+}
+
+.role-badge.staff {
+  background: #eef4ff;
+  color: #2450ba;
+}
+
+.role-badge.employee {
+  background: #ecfaef;
+  color: #1f7b33;
+}
+
+.role-lock,
+.admin-note {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
 .profile-panel {
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -504,7 +600,17 @@
   border: 0;
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 1200px) {
+  .app-shell {
+    width: min(100%, calc(100% - 1.25rem));
+  }
+
+  .toolbar {
+    grid-template-columns: minmax(200px, 1fr) auto auto;
+  }
+}
+
+@media (max-width: 992px) {
   .app-shell {
     width: min(100%, calc(100% - 1rem));
   }
@@ -513,9 +619,23 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .task-form-admin {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-task-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .task-form input:first-of-type,
   .task-form select:last-of-type,
   .task-form button {
+    grid-column: 1 / -1;
+  }
+
+  .admin-task-form input:first-of-type,
+  .admin-task-form select:last-of-type,
+  .admin-task-form button {
     grid-column: 1 / -1;
   }
 
@@ -536,9 +656,22 @@
   .profile-grid {
     grid-template-columns: 1fr;
   }
+
+  .admin-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .team-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .team-actions {
+    justify-content: flex-start;
+  }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 768px) {
   .app-shell {
     width: min(100%, calc(100% - 0.75rem));
     padding: 1rem 0 1.7rem;
@@ -558,7 +691,33 @@
   }
 
   .top-actions button {
-    flex: 1 1 calc(33.33% - 0.5rem);
+    flex: 1 1 calc(50% - 0.5rem);
+  }
+
+  .task-form,
+  .task-form-admin,
+  .admin-task-form,
+  .toolbar {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+    gap: 0.55rem;
+  }
+
+  .task-form input:first-of-type,
+  .task-form select:last-of-type,
+  .task-form button,
+  .admin-task-form input:first-of-type,
+  .admin-task-form select:last-of-type,
+  .admin-task-form button {
+    grid-column: auto;
+  }
+
+  .filters {
+    width: 100%;
+  }
+
+  .filters button {
+    flex: 1 1 calc(50% - 0.5rem);
   }
 
   .task-list li {
@@ -582,17 +741,10 @@
   }
 }
 
-@media (max-width: 480px) {
+@media (max-width: 576px) {
   .app-shell {
     width: min(100%, calc(100% - 0.5rem));
     padding: 0.8rem 0 2rem;
-  }
-
-  .toolbar,
-  .task-form,
-  .filters {
-    grid-template-columns: 1fr;
-    gap: 0.5rem;
   }
 
   .home-actions,
@@ -605,6 +757,7 @@
   .home-actions button,
   .actions button,
   .top-actions button,
+  .filters button,
   .task-form button,
   .ghost,
   .edit,
@@ -614,10 +767,8 @@
     width: 100%;
   }
 
-  .task-form input:first-of-type,
-  .task-form select:last-of-type,
-  .task-form button {
-    grid-column: auto;
+  .top-actions button {
+    flex: 1 1 100%;
   }
 
   .task-list li {

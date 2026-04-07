@@ -4,13 +4,15 @@ Full-stack task manager built with React + Vite (frontend) and Express + MongoDB
 
 ## Features
 
-- ✅ Register/login with JWT authentication
+- ✅ Employee registration with OTP-based login
 - ✅ Tasks isolated per user account
 - ✅ Create tasks with title, due date, and priority
 - ✅ Edit existing tasks
 - ✅ Mark tasks complete/incomplete/in-progress
 - ✅ Advanced filtering and search
-- ✅ Task assignment to other users
+- ✅ Admin-only task assignment to staff and employees
+- ✅ Role management for admin, staff, and employee accounts
+- ✅ Employee-only task completion enforcement
 - ✅ In-app notifications (overdue, due-soon, assigned-to-you)
 - ✅ Delete individual tasks or clear completed tasks
 - ✅ Responsive design (laptop, tablet, phone)
@@ -76,6 +78,20 @@ MONGODB_URI=mongodb://127.0.0.1:27017/task_management_web
 
 # CORS (comma-separated list of allowed frontend URLs)
 ALLOWED_ORIGINS=https://myapp.com,https://www.myapp.com
+
+# Reserved admin emails (optional). These emails cannot self-register.
+ADMIN_EMAILS=admin@example.com,ops@example.com
+
+# SMTP for OTP delivery
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=your-smtp-user
+SMTP_PASS=your-smtp-password
+SMTP_FROM=no-reply@yourdomain.com
+
+# OTP expiry in milliseconds (optional, default 300000 = 5 minutes)
+OTP_EXPIRES_MS=300000
 ```
 
 ### Frontend Environment Variables
@@ -90,19 +106,21 @@ In development, defaults to `http://localhost:4000`. In production, set `VITE_AP
 ## API Endpoints
 
 ### Authentication
-- `POST /api/auth/register` - Create new account
-- `POST /api/auth/login` - Sign in
+- `POST /api/auth/register` - Create employee account
+- `POST /api/auth/login/request-otp` - Validate credentials and send OTP
+- `POST /api/auth/login/verify-otp` - Verify OTP and sign in
 - `GET /api/auth/me` - Get current user
 
 ### Tasks
 - `GET /api/tasks` - List user's tasks
 - `POST /api/tasks` - Create task
-- `PUT /api/tasks/:id` - Update task (owner can edit all, assignee can update status)
+- `PUT /api/tasks/:id` - Update task (owner can edit details, admin can assign, assigned employee can complete)
 - `DELETE /api/tasks/:id` - Delete task (owner only)
 - `DELETE /api/tasks/completed` - Clear completed tasks
 
 ### Users
 - `GET /api/users` - List all users (for assignment)
+- `PUT /api/users/:id/role` - Admin-only role update for staff or employee
 
 All protected routes require: `Authorization: Bearer <token>`
 
@@ -113,6 +131,7 @@ All protected routes require: `Authorization: Bearer <token>`
 {
   name: String (required),
   email: String (required, unique),
+  role: String (admin|staff|employee, defaults to employee),
   passwordHash: String (bcrypt),
   createdAt: Date
 }
@@ -127,10 +146,17 @@ All protected routes require: `Authorization: Bearer <token>`
   status: String (pending|in_progress|completed),
   dueDate: Date (optional),
   priority: String (low|medium|high),
+  assigneeRole: String (returned by the API when populated),
   createdAt: Date,
   updatedAt: Date
 }
 ```
+
+## Roles
+
+- `admin` users are created manually (database seed/manual insert), can open the Admin section, assign tasks, and change staff/employee roles.
+- `staff` users can receive assigned tasks but cannot complete them.
+- `employee` users can register themselves, receive assigned tasks, and are the only users allowed to mark them completed.
 
 ## Deployment
 

@@ -83,6 +83,18 @@ const isDueSoon = (dueDate) => {
   return due > now && due - now <= 1000 * 60 * 60 * 24
 }
 
+const formatRole = (role) => {
+  if (role === 'admin') {
+    return 'Admin'
+  }
+
+  if (role === 'staff') {
+    return 'Staff'
+  }
+
+  return 'Employee'
+}
+
 function App() {
   const [tasks, setTasks] = useState([])
   const [users, setUsers] = useState([])
@@ -110,9 +122,18 @@ function App() {
   const [authName, setAuthName] = useState('')
   const [authEmail, setAuthEmail] = useState('')
   const [authPassword, setAuthPassword] = useState('')
+  const [authOtp, setAuthOtp] = useState('')
+  const [authChallengeId, setAuthChallengeId] = useState('')
   const [authLoading, setAuthLoading] = useState(false)
   const [showHomePage, setShowHomePage] = useState(true)
   const [activeView, setActiveView] = useState('tasks')
+  const [adminDraft, setAdminDraft] = useState('')
+  const [adminDraftDueDate, setAdminDraftDueDate] = useState('')
+  const [adminDraftPriority, setAdminDraftPriority] = useState('medium')
+  const [adminDraftStatus, setAdminDraftStatus] = useState('pending')
+  const [adminDraftAssigneeId, setAdminDraftAssigneeId] = useState('')
+  const [adminTaskSaving, setAdminTaskSaving] = useState(false)
+  const [roleSavingId, setRoleSavingId] = useState(null)
 
   const authedFetch = useCallback(
     async (path, init) => {
@@ -313,6 +334,18 @@ function App() {
 
   const recentTasks = useMemo(() => tasks.slice(0, 5), [tasks])
 
+  const isAdmin = user?.role === 'admin'
+
+  const assignableUsers = useMemo(
+    () => users.filter((item) => item.role === 'staff' || item.role === 'employee'),
+    [users],
+  )
+
+  const adminCount = users.filter((item) => item.role === 'admin').length
+  const staffCount = users.filter((item) => item.role === 'staff').length
+  const employeeCount = users.filter((item) => item.role === 'employee').length
+  const assignableCount = assignableUsers.length
+
   const getUserName = (id) => {
     if (!id) {
       return 'Unassigned'
@@ -321,35 +354,95 @@ function App() {
     return found ? found.name : 'Unknown user'
   }
 
+  const getUserRole = (id) => {
+    const found = users.find((item) => item.id === id)
+    return found?.role ?? 'employee'
+  }
+
+  const canCompleteTask = (task) => task.assigneeId === user?.id && user?.role === 'employee'
+
+  const resetOtpFlow = () => {
+    setAuthOtp('')
+    setAuthChallengeId('')
+  }
+
   const onAuthSubmit = (event) => {
     event.preventDefault()
 
     const submit = async () => {
       setAuthLoading(true)
       try {
-        const payload =
-          authMode === 'register'
-            ? { name: authName.trim(), email: authEmail.trim(), password: authPassword }
-            : { email: authEmail.trim(), password: authPassword }
-
-        const response = await fetch(`${API_URL}/auth/${authMode}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        })
-
-        const data = await parseJsonResponse(response)
-        if (!response.ok) {
-          throw new Error(data?.message ?? 'Authentication failed.')
-        }
-
         if (authMode === 'register') {
+          const response = await fetch(`${API_URL}/auth/register`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: authName.trim(),
+              email: authEmail.trim(),
+              password: authPassword,
+            }),
+          })
+
+          const data = await parseJsonResponse(response)
+          if (!response.ok) {
+            throw new Error(data?.message ?? 'Registration failed.')
+          }
+
           setShowHomePage(false)
           setAuthMode('login')
           setAuthName('')
           setAuthPassword('')
-          setMessage('Account created. Please sign in with your credentials.')
+          resetOtpFlow()
+          setMessage(data?.message ?? 'Employee account created. Please sign in using OTP.')
           return
+        }
+
+        if (!authChallengeId) {
+          const response = await fetch(`${API_URL}/auth/login/request-otp`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: authEmail.trim(),
+              password: authPassword,
+            }),
+          })
+
+          const data = await parseJsonResponse(response)
+          if (!response.ok) {
+            throw new Error(data?.message ?? 'Unable to send OTP.')
+          }
+
+          if (data?.token && data?.user) {
+            localStorage.setItem(TOKEN_KEY, data.token)
+            setToken(data.token)
+            setUser(data.user)
+            setAuthPassword('')
+            resetOtpFlow()
+            setMessage('')
+            return
+          }
+
+          if (!data?.challengeId) {
+            throw new Error('OTP request failed. Try again.')
+          }
+
+          setAuthChallengeId(data.challengeId)
+          setMessage(data?.message ?? 'OTP sent to your email.')
+          return
+        }
+
+        const response = await fetch(`${API_URL}/auth/login/verify-otp`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            challengeId: authChallengeId,
+            otp: authOtp.trim(),
+          }),
+        })
+
+        const data = await parseJsonResponse(response)
+        if (!response.ok) {
+          throw new Error(data?.message ?? 'OTP verification failed.')
         }
 
         if (!data.token || !data.user) {
@@ -360,6 +453,7 @@ function App() {
         setToken(data.token)
         setUser(data.user)
         setAuthPassword('')
+        resetOtpFlow()
         setMessage('')
       } catch (error) {
         setMessage(error instanceof Error ? error.message : 'Authentication failed.')
@@ -379,6 +473,14 @@ function App() {
     setTasks([])
     setShowHomePage(true)
     setActiveView('tasks')
+    setDraftAssigneeId('')
+    setAdminDraft('')
+    setAdminDraftDueDate('')
+    setAdminDraftPriority('medium')
+    setAdminDraftStatus('pending')
+    setAdminDraftAssigneeId('')
+    setAdminTaskSaving(false)
+    setRoleSavingId(null)
     setMessage('Signed out.')
   }
 
@@ -399,7 +501,7 @@ function App() {
             dueDate: draftDueDate || null,
             priority: draftPriority,
             status: draftStatus,
-            assigneeId: draftAssigneeId || null,
+            assigneeId: isAdmin ? draftAssigneeId || null : undefined,
           }),
         })
 
@@ -421,8 +523,54 @@ function App() {
     void submit()
   }
 
+  const onAdminCreateTask = (event) => {
+    event.preventDefault()
+
+    const title = adminDraft.trim()
+    if (!title) {
+      return
+    }
+
+    const submit = async () => {
+      setAdminTaskSaving(true)
+      try {
+        const response = await authedFetch('/tasks', {
+          method: 'POST',
+          body: JSON.stringify({
+            title,
+            dueDate: adminDraftDueDate || null,
+            priority: adminDraftPriority,
+            status: adminDraftStatus,
+            assigneeId: adminDraftAssigneeId || null,
+          }),
+        })
+
+        const created = await parseJsonResponse(response)
+        setTasks((previous) => [created, ...previous])
+        setAdminDraft('')
+        setAdminDraftDueDate('')
+        setAdminDraftPriority('medium')
+        setAdminDraftStatus('pending')
+        setAdminDraftAssigneeId('')
+        setMessage('')
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : 'Could not create assigned task.')
+      } finally {
+        setAdminTaskSaving(false)
+      }
+    }
+
+    void submit()
+  }
+
   const updateTaskStatus = (id, status) => {
     const submit = async () => {
+      const task = tasks.find((item) => item.id === id)
+      if (status === 'completed' && task && !canCompleteTask(task)) {
+        setMessage('Only the assigned employee can complete this task.')
+        return
+      }
+
       try {
         const response = await authedFetch(`/tasks/${id}`, {
           method: 'PUT',
@@ -434,6 +582,31 @@ function App() {
         setMessage('')
       } catch (error) {
         setMessage(error instanceof Error ? error.message : 'Could not update task status.')
+      }
+    }
+
+    void submit()
+  }
+
+  const updateUserRole = (id, nextRole) => {
+    const submit = async () => {
+      setRoleSavingId(id)
+      try {
+        const response = await authedFetch(`/users/${id}/role`, {
+          method: 'PUT',
+          body: JSON.stringify({ role: nextRole }),
+        })
+
+        const updated = await parseJsonResponse(response)
+        setUsers((previous) => previous.map((item) => (item.id === id ? updated : item)))
+        if (user?.id === id) {
+          setUser((previous) => (previous ? { ...previous, role: updated.role } : previous))
+        }
+        setMessage('')
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : 'Could not update user role.')
+      } finally {
+        setRoleSavingId(null)
       }
     }
 
@@ -513,15 +686,20 @@ function App() {
 
     const submit = async () => {
       try {
+        const payload = {
+          title,
+          dueDate: editingDueDate || null,
+          priority: editingPriority,
+          status: editingStatus,
+        }
+
+        if (isAdmin) {
+          payload.assigneeId = editingAssigneeId || null
+        }
+
         const response = await authedFetch(`/tasks/${task.id}`, {
           method: 'PUT',
-          body: JSON.stringify({
-            title,
-            dueDate: editingDueDate || null,
-            priority: editingPriority,
-            status: editingStatus,
-            assigneeId: editingAssigneeId || null,
-          }),
+          body: JSON.stringify(payload),
         })
 
         const updated = await parseJsonResponse(response)
@@ -562,6 +740,8 @@ function App() {
                 onClick={() => {
                   setShowHomePage(false)
                   setAuthMode('login')
+                  resetOtpFlow()
+                  setAuthPassword('')
                   setMessage('')
                 }}
               >
@@ -573,6 +753,8 @@ function App() {
                 onClick={() => {
                   setShowHomePage(false)
                   setAuthMode('register')
+                  resetOtpFlow()
+                  setAuthPassword('')
                   setMessage('')
                 }}
               >
@@ -583,6 +765,11 @@ function App() {
         ) : (
           <section className="card auth-card">
             <h2>{authMode === 'login' ? 'Sign In' : 'Create Account'}</h2>
+            {authMode === 'login' ? (
+              <p className="home-subtitle">Admins log in directly. Employees receive OTP on email.</p>
+            ) : (
+              <p className="home-subtitle">Registration creates employee accounts only.</p>
+            )}
             <form className="auth-form" onSubmit={onAuthSubmit}>
               {authMode === 'register' ? (
                 <input
@@ -599,6 +786,7 @@ function App() {
                 value={authEmail}
                 onChange={(event) => setAuthEmail(event.target.value)}
                 required
+                disabled={authMode === 'login' && Boolean(authChallengeId)}
               />
               <input
                 type="password"
@@ -607,19 +795,54 @@ function App() {
                 onChange={(event) => setAuthPassword(event.target.value)}
                 required
                 minLength={6}
+                disabled={authMode === 'login' && Boolean(authChallengeId)}
               />
+
+              {authMode === 'login' && authChallengeId ? (
+                <>
+                  <input
+                    type="text"
+                    placeholder="Enter 6-digit OTP"
+                    value={authOtp}
+                    onChange={(event) => setAuthOtp(event.target.value)}
+                    inputMode="numeric"
+                    pattern="[0-9]{6}"
+                    maxLength={6}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="ghost"
+                    onClick={() => {
+                      resetOtpFlow()
+                      setMessage('Enter credentials to request a new OTP.')
+                    }}
+                    disabled={authLoading}
+                  >
+                    Change Credentials
+                  </button>
+                </>
+              ) : null}
+
               <button type="submit" disabled={authLoading}>
                 {authLoading
                   ? 'Please wait...'
                   : authMode === 'login'
-                    ? 'Sign In'
+                    ? authChallengeId
+                      ? 'Verify OTP'
+                      : 'Send OTP'
                     : 'Create Account'}
               </button>
             </form>
             <button
               type="button"
               className="switch-auth"
-              onClick={() => setAuthMode((prev) => (prev === 'login' ? 'register' : 'login'))}
+              onClick={() => {
+                setAuthMode((prev) => (prev === 'login' ? 'register' : 'login'))
+                resetOtpFlow()
+                setAuthPassword('')
+                setMessage('')
+              }}
             >
               {authMode === 'login'
                 ? 'Need an account? Register'
@@ -646,13 +869,160 @@ function App() {
               >
                 Profile
               </button>
+              {isAdmin ? (
+                <button
+                  type="button"
+                  className={`ghost ${activeView === 'admin' ? 'active-nav' : ''}`}
+                  onClick={() => setActiveView('admin')}
+                >
+                  Admin
+                </button>
+              ) : null}
               <button type="button" className="ghost" onClick={onLogout}>
                 Logout
               </button>
             </div>
           </div>
 
-          {activeView === 'profile' ? (
+          {message ? <p className="message">{message}</p> : null}
+
+          {activeView === 'admin' && isAdmin ? (
+            <section className="admin-view" aria-label="Admin workspace">
+              <header className="admin-header">
+                <div>
+                  <p className="kicker">Admin section</p>
+                  <h2>Assign work to staff and employees</h2>
+                  <p className="subtitle">
+                    Only admins can assign tasks. Only employees can complete assigned work.
+                  </p>
+                </div>
+
+                <div className="profile-stats admin-stats">
+                  <article>
+                    <h3>Users</h3>
+                    <p>{users.length}</p>
+                  </article>
+                  <article>
+                    <h3>Admins</h3>
+                    <p>{adminCount}</p>
+                  </article>
+                  <article>
+                    <h3>Staff</h3>
+                    <p>{staffCount}</p>
+                  </article>
+                  <article>
+                    <h3>Employees</h3>
+                    <p>{employeeCount}</p>
+                  </article>
+                </div>
+              </header>
+
+              <div className="profile-grid admin-grid">
+                <article className="profile-panel">
+                  <h3>Team roles</h3>
+                  <p>Promote team members to staff or keep them as employees.</p>
+
+                  <ul className="team-list">
+                    {users.map((item) => (
+                      <li key={item.id} className="team-row">
+                        <div>
+                          <strong>{item.name}</strong>
+                          <small>
+                            {item.email} · <span className={`role-badge ${item.role}`}>{formatRole(item.role)}</span>
+                          </small>
+                        </div>
+
+                        {item.role === 'admin' ? (
+                          <span className="role-lock">Admin account</span>
+                        ) : (
+                          <div className="team-actions">
+                            <button
+                              type="button"
+                              className={`ghost ${item.role === 'staff' ? 'active-nav' : ''}`}
+                              onClick={() => updateUserRole(item.id, 'staff')}
+                              disabled={roleSavingId === item.id || item.role === 'staff'}
+                            >
+                              Staff
+                            </button>
+                            <button
+                              type="button"
+                              className={`ghost ${item.role === 'employee' ? 'active-nav' : ''}`}
+                              onClick={() => updateUserRole(item.id, 'employee')}
+                              disabled={roleSavingId === item.id || item.role === 'employee'}
+                            >
+                              Employee
+                            </button>
+                          </div>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </article>
+
+                <article className="profile-panel">
+                  <h3>Assign task</h3>
+                  <p>Use this form to assign work only to staff or employees.</p>
+
+                  <form className="task-form admin-task-form" onSubmit={onAdminCreateTask}>
+                    <label htmlFor="admin-task-input" className="sr-only">
+                      Task title
+                    </label>
+                    <input
+                      id="admin-task-input"
+                      type="text"
+                      value={adminDraft}
+                      onChange={(event) => setAdminDraft(event.target.value)}
+                      placeholder="Add an assigned task"
+                      maxLength={120}
+                    />
+                    <input
+                      type="date"
+                      value={adminDraftDueDate}
+                      onChange={(event) => setAdminDraftDueDate(event.target.value)}
+                      aria-label="Admin due date"
+                    />
+                    <select
+                      value={adminDraftPriority}
+                      onChange={(event) => setAdminDraftPriority(event.target.value)}
+                      aria-label="Admin priority"
+                    >
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                    </select>
+                    <select
+                      value={adminDraftStatus}
+                      onChange={(event) => setAdminDraftStatus(event.target.value)}
+                      aria-label="Admin status"
+                    >
+                      <option value="pending">Pending</option>
+                      <option value="in_progress">In Progress</option>
+                    </select>
+                    <select
+                      value={adminDraftAssigneeId}
+                      onChange={(event) => setAdminDraftAssigneeId(event.target.value)}
+                      aria-label="Assign to user"
+                      required
+                    >
+                      <option value="" disabled hidden>
+                        Select staff or employee
+                      </option>
+                      {assignableUsers.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name} ({formatRole(item.role)})
+                        </option>
+                      ))}
+                    </select>
+                    <button type="submit" disabled={adminTaskSaving || assignableUsers.length === 0}>
+                      {adminTaskSaving ? 'Assigning...' : 'Assign Task'}
+                    </button>
+                  </form>
+
+                  <p className="admin-note">Assignable users: {assignableCount}</p>
+                </article>
+              </div>
+            </section>
+          ) : activeView === 'profile' ? (
             <section className="profile-view" aria-label="Profile page">
               <header className="profile-header">
                 <div className="profile-avatar" aria-hidden="true">
@@ -661,6 +1031,7 @@ function App() {
                 <div>
                   <h2>{user.name}</h2>
                   <p>{user.email}</p>
+                  <p>Role: {formatRole(user.role)}</p>
                 </div>
               </header>
 
@@ -724,60 +1095,61 @@ function App() {
                 </section>
               ) : null}
 
-              <form className="task-form" onSubmit={onCreateTask}>
-                <label htmlFor="task-input" className="sr-only">
-                  New task
-                </label>
-                <input
-                  id="task-input"
-                  type="text"
-                  value={draft}
-                  onChange={(event) => setDraft(event.target.value)}
-                  placeholder="Add a task"
-                  maxLength={120}
-                />
-                <input
-                  type="date"
-                  value={draftDueDate}
-                  onChange={(event) => setDraftDueDate(event.target.value)}
-                  aria-label="Due date"
-                />
-                <select
-                  value={draftPriority}
-                  onChange={(event) => setDraftPriority(event.target.value)}
-                  aria-label="Priority"
-                >
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
-                </select>
-                <select
-                  value={draftStatus}
-                  onChange={(event) => setDraftStatus(event.target.value)}
-                  aria-label="Status"
-                >
-                  <option value="pending">Pending</option>
-                  <option value="in_progress">In Progress</option>
-                  <option value="completed">Completed</option>
-                </select>
-                <select
-                  value={draftAssigneeId}
-                  onChange={(event) => setDraftAssigneeId(event.target.value)}
-                  aria-label="Assignee"
-                >
-                  <option value="" disabled hidden>
-                    Select assignee
-                  </option>
-                  {users.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name}
-                    </option>
-                  ))}
-                </select>
-                <button type="submit" disabled={isSaving}>
-                  {isSaving ? 'Adding...' : 'Add Task'}
-                </button>
-              </form>
+              {isAdmin ? (
+                <form className="task-form task-form-admin" onSubmit={onCreateTask}>
+                  <label htmlFor="task-input" className="sr-only">
+                    New task
+                  </label>
+                  <input
+                    id="task-input"
+                    type="text"
+                    value={draft}
+                    onChange={(event) => setDraft(event.target.value)}
+                    placeholder="Add a task"
+                    maxLength={120}
+                  />
+                  <input
+                    type="date"
+                    value={draftDueDate}
+                    onChange={(event) => setDraftDueDate(event.target.value)}
+                    aria-label="Due date"
+                  />
+                  <select
+                    value={draftPriority}
+                    onChange={(event) => setDraftPriority(event.target.value)}
+                    aria-label="Priority"
+                  >
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                  </select>
+                  <select
+                    value={draftStatus}
+                    onChange={(event) => setDraftStatus(event.target.value)}
+                    aria-label="Status"
+                  >
+                    <option value="pending">Pending</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="completed">Completed</option>
+                  </select>
+                  <select
+                    value={draftAssigneeId}
+                    onChange={(event) => setDraftAssigneeId(event.target.value)}
+                    aria-label="Assign to employee"
+                  >
+                    <option value="">Assign to staff/employee (optional)</option>
+                    {assignableUsers.map((item) => (
+                      <option key={item.id} value={item.id}>
+                        {item.name} ({formatRole(item.role)})
+                      </option>
+                    ))}
+                  </select>
+
+                  <button type="submit" disabled={isSaving}>
+                    {isSaving ? 'Adding...' : 'Add / Assign Task'}
+                  </button>
+                </form>
+              ) : null}
 
               <div className="toolbar filters-wrap">
                 <input
@@ -835,8 +1207,6 @@ function App() {
                 </button>
               </div>
 
-              {message ? <p className="message">{message}</p> : null}
-
               <ul className="task-list">
                 {loading ? (
                   <li className="empty">Loading tasks...</li>
@@ -849,11 +1219,16 @@ function App() {
                         type="button"
                         className={`status-chip ${task.status}`}
                         onClick={() => {
+                          if (task.status === 'in_progress' && !canCompleteTask(task)) {
+                            setMessage('Only the assigned employee can complete this task.')
+                            return
+                          }
+
                           if (task.status !== 'completed') {
                             updateTaskStatus(task.id, nextStatus(task.status))
                           }
                         }}
-                        disabled={task.status === 'completed'}
+                        disabled={task.status === 'completed' || (task.status === 'in_progress' && !canCompleteTask(task))}
                         aria-label={`Set next status for ${task.title}`}
                       >
                         {formatStatus(task.status)}
@@ -888,19 +1263,21 @@ function App() {
                             <option value="in_progress">In Progress</option>
                             <option value="completed">Completed</option>
                           </select>
-                          <select
-                            value={editingAssigneeId}
-                            onChange={(event) => setEditingAssigneeId(event.target.value)}
-                          >
-                            <option value="" disabled hidden>
-                              Select assignee
-                            </option>
-                            {users.map((item) => (
-                              <option key={item.id} value={item.id}>
-                                {item.name}
+                          {isAdmin ? (
+                            <select
+                              value={editingAssigneeId}
+                              onChange={(event) => setEditingAssigneeId(event.target.value)}
+                            >
+                              <option value="" disabled hidden>
+                                Select assignee
                               </option>
-                            ))}
-                          </select>
+                              {assignableUsers.map((item) => (
+                                <option key={item.id} value={item.id}>
+                                  {item.name} ({formatRole(item.role)})
+                                </option>
+                              ))}
+                            </select>
+                          ) : null}
                           <div className="actions">
                             <button type="button" className="save" onClick={() => saveEdit(task)}>
                               Save
@@ -916,6 +1293,7 @@ function App() {
                             <span>{task.title}</span>
                             <small>
                               {formatDueDate(task.dueDate)} | {task.priority} priority | assignee: {getUserName(task.assigneeId)}
+                              {task.assigneeId ? ` (${formatRole(getUserRole(task.assigneeId))})` : ''}
                             </small>
                           </div>
 
