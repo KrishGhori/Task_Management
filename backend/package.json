@@ -6,7 +6,8 @@
   "main": "server.js",
   "scripts": {
     "dev": "node --watch server.js",
-    "start": "node server.js"
+    "start": "node server.js",
+    "build": "echo 'Backend is a Node.js app, no build needed'"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
