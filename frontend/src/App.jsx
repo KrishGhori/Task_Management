@@ -11,7 +11,11 @@ const getApiUrl = () => {
   if (import.meta.env.VITE_API_URL) {
     return `${normalizeApiBaseUrl(import.meta.env.VITE_API_URL)}/api`
   }
-  
+
+  if (import.meta.env.PROD) {
+    return 'https://task-managment-mw6o.vercel.app/api'
+  }
+
   // Fallback: if deployed, use same origin; otherwise use localhost
   if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
     // Production: use same origin with API port (or assume relative path)
