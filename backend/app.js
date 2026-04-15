@@ -23,7 +23,9 @@ const corsOptions = {
         if (!allowed.includes('*')) {
           return allowed === normalizedOrigin
         }
-        const regexPattern = allowed
+        // Support wildcard entries with or without protocol (e.g. *.vercel.app or https://*.vercel.app)
+        const wildcardHost = allowed.replace(/^https?:\/\//, '')
+        const regexPattern = wildcardHost
           .replace(/\./g, '\\.')
           .replace(/\*/g, '.*')
         return new RegExp(`^https?:\\/\\/${regexPattern}(?::\\d+)?$`).test(normalizedOrigin)
