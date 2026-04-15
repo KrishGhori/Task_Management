@@ -9,7 +9,7 @@ const normalizeApiBaseUrl = (value) => {
 
 const getApiUrl = () => {
   if (import.meta.env.PROD) {
-    return 'https://task-managment-mw6o.vercel.app/api'
+    return 'https://task-managment-mw6o-4gt7gftmo-krishghoris-projects.vercel.app/api'
   }
 
   if (import.meta.env.VITE_API_URL) {
