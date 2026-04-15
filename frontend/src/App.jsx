@@ -21,6 +21,7 @@ const getApiUrl = () => {
     return `${window.location.origin}/api`
   }
 
+  
   return '/api'
 }
 
