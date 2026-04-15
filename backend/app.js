@@ -9,6 +9,14 @@ import usersRoutes from './routes/usersRoutes.js'
 
 const app = express()
 
+app.get('/', (_req, res) => {
+  res.json({
+    ok: true,
+    service: 'Task Management API',
+    health: '/api/health',
+  })
+})
+
 const corsOptions = {
   origin: (origin, callback) => {
     if (!origin || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
