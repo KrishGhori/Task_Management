@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Task Management Web
 
 Full-stack task manager built with React + Vite (frontend) and Express + MongoDB (backend).
@@ -187,3 +188,6 @@ npm run lint       - Run ESLint
 ## License
 
 Open source
+=======
+# Task_managment
+>>>>>>> 582bdc09e460915ea93a371adb03bcd765ff492f
