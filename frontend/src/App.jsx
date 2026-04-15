@@ -8,26 +8,44 @@ const normalizeApiBaseUrl = (value) => {
 }
 
 const getApiUrl = () => {
-  if (import.meta.env.PROD) {
-    return 'https://task-managment-mw6o.vercel.app/api'
-  }
-
   if (import.meta.env.VITE_API_URL) {
     return `${normalizeApiBaseUrl(import.meta.env.VITE_API_URL)}/api`
   }
 
-  // Fallback: if deployed, use same origin; otherwise use localhost
-  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-    // Production: use same origin with API port (or assume relative path)
-    return `${window.location.protocol}//${window.location.host}/api`
+  if (import.meta.env.DEV) {
+    // Use Vite proxy during development.
+    return '/api'
   }
-  
-  // Development: use localhost:4000
-  return 'http://localhost:4000/api'
+
+  if (typeof window !== 'undefined') {
+    return `${window.location.origin}/api`
+  }
+
+  return '/api'
 }
 
 const API_URL = getApiUrl()
 const TOKEN_KEY = 'task-management.auth.token'
+
+const toNetworkError = (error) => {
+  if (error instanceof TypeError) {
+    const message =
+      import.meta.env.DEV
+        ? 'Cannot reach the API. Make sure the backend is running on http://localhost:4000 and try again.'
+        : 'Cannot reach the API. Check VITE_API_URL and backend availability.'
+    return new Error(message)
+  }
+
+  return error instanceof Error ? error : new Error('Network request failed.')
+}
+
+const fetchJson = async (url, init) => {
+  try {
+    return await fetch(url, init)
+  } catch (error) {
+    throw toNetworkError(error)
+  }
+}
 
 const parseJsonResponse = async (response) => {
   const contentType = response.headers.get('content-type') ?? ''
@@ -147,7 +165,7 @@ function App() {
         headers.set('Content-Type', 'application/json')
       }
 
-      const response = await fetch(`${API_URL}${path}`, {
+      const response = await fetchJson(`${API_URL}${path}`, {
         ...init,
         headers,
       })
@@ -372,7 +390,7 @@ function App() {
       setAuthLoading(true)
       try {
         if (authMode === 'register') {
-          const response = await fetch(`${API_URL}/auth/register`, {
+          const response = await fetchJson(`${API_URL}/auth/register`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -397,7 +415,7 @@ function App() {
         }
 
         if (!authChallengeId) {
-          const response = await fetch(`${API_URL}/auth/login/request-otp`, {
+          const response = await fetchJson(`${API_URL}/auth/login/request-otp`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -430,7 +448,7 @@ function App() {
           return
         }
 
-        const response = await fetch(`${API_URL}/auth/login/verify-otp`, {
+        const response = await fetchJson(`${API_URL}/auth/login/verify-otp`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
