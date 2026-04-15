@@ -8,12 +8,12 @@ const normalizeApiBaseUrl = (value) => {
 }
 
 const getApiUrl = () => {
-  if (import.meta.env.VITE_API_URL) {
-    return `${normalizeApiBaseUrl(import.meta.env.VITE_API_URL)}/api`
-  }
-
   if (import.meta.env.PROD) {
     return 'https://task-managment-mw6o.vercel.app/api'
+  }
+
+  if (import.meta.env.VITE_API_URL) {
+    return `${normalizeApiBaseUrl(import.meta.env.VITE_API_URL)}/api`
   }
 
   // Fallback: if deployed, use same origin; otherwise use localhost
