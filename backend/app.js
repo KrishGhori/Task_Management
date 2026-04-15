@@ -55,6 +55,15 @@ app.use((req, _res, next) => {
   next()
 })
 
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api') && req.path !== '/api/health' && !req.app.locals.dbConnected) {
+    res.status(503).json({ message: 'Database is unavailable. Please try again later.' })
+    return
+  }
+
+  next()
+})
+
 app.use(express.json())
 
 app.use('/api/health', healthRoutes)
