@@ -1,8 +1,5 @@
 {
-  "installCommand": "npm install",
-  "buildCommand": "npm run build",
-  "runtime": "nodejs20.x",
-  "env": {
-    "NODE_ENV": "production"
+  "functions": {
+    "api/*.js": {}
   }
 }
