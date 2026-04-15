@@ -1,5 +1,7 @@
 {
-  "buildCommand": "npm install",
+  "installCommand": "npm install",
+  "buildCommand": "npm run build",
+  "startCommand": "npm start",
   "runtime": "nodejs20.x",
   "env": {
     "NODE_ENV": "production"
