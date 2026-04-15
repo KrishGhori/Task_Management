@@ -1,6 +1,5 @@
 import cors from 'cors'
 import express from 'express'
-import { ALLOWED_ORIGINS } from './config/env.js'
 import authRoutes from './routes/authRoutes.js'
 import healthRoutes from './routes/healthRoutes.js'
 import profileRoutes from './routes/profileRoutes.js'
@@ -19,33 +18,8 @@ app.get('/', (_req, res) => {
 
 const corsOptions = {
   origin: (origin, callback) => {
-    if (!origin || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
-      callback(null, true)
-      return
-    }
-
-    const normalizedOrigin = origin.replace(/\/$/, '')
-
-    if (ALLOWED_ORIGINS.length > 0) {
-      const isAllowed = ALLOWED_ORIGINS.some((allowed) => {
-        if (!allowed.includes('*')) {
-          return allowed === normalizedOrigin
-        }
-        // Support wildcard entries with or without protocol (e.g. *.vercel.app or https://*.vercel.app)
-        const wildcardHost = allowed.replace(/^https?:\/\//, '')
-        const regexPattern = wildcardHost
-          .replace(/\./g, '\\.')
-          .replace(/\*/g, '.*')
-        return new RegExp(`^https?:\\/\\/${regexPattern}(?::\\d+)?$`).test(normalizedOrigin)
-      })
-      if (isAllowed) {
-        callback(null, true)
-        return
-      }
-    }
-
-    console.warn(`CORS rejected: ${origin}`)
-    callback(new Error('CORS not allowed'))
+    // Allow all origins as requested by deployment setup.
+    callback(null, true)
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
