@@ -19,6 +19,8 @@ const mailTransporter =
       })
     : null
 
+export const isMailConfigured = Boolean(mailTransporter)
+
 export const sendOtpEmail = async ({ to, code, name }) => {
   if (!mailTransporter) {
     throw new Error(

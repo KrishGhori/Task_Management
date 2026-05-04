@@ -2,7 +2,7 @@ import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { randomUUID } from 'node:crypto'
 import { ADMIN_EMAILS, JWT_SECRET, OTP_EXPIRES_MS } from '../config/env.js'
-import { sendOtpEmail } from '../config/mail.js'
+import { isMailConfigured, sendOtpEmail } from '../config/mail.js'
 import { Profile } from '../models/Profile.js'
 import { User } from '../models/User.js'
 import { parseUser } from '../utils/serializers.js'
@@ -130,16 +130,23 @@ export const requestOtp = async (req, res) => {
       name: userRow.name,
     })
   } catch (error) {
-    otpChallenges.delete(challengeId)
-    res.status(500).json({
-      message: error instanceof Error ? error.message : 'Unable to send OTP email.',
-    })
-    return
+    if (process.env.NODE_ENV === 'production') {
+      otpChallenges.delete(challengeId)
+      res.status(500).json({
+        message: error instanceof Error ? error.message : 'Unable to send OTP email.',
+      })
+      return
+    }
+
+    console.warn('OTP email delivery fallback:', error instanceof Error ? error.message : error)
   }
 
   res.json({
     challengeId,
-    message: 'OTP sent to your email. Verify to complete login.',
+    message: isMailConfigured
+      ? 'OTP sent to your email. Verify to complete login.'
+      : 'SMTP is not configured. Use the development OTP shown below to continue.',
+    debugOtp: isMailConfigured ? undefined : otpCode,
   })
 }
 
