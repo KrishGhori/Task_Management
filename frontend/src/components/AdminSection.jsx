@@ -89,14 +89,6 @@ const AdminSection = ({ app }) => (
             <option value="high">High</option>
           </select>
           <select
-            value={app.adminDraftStatus}
-            onChange={(event) => app.setAdminDraftStatus(event.target.value)}
-            aria-label="Admin status"
-          >
-            <option value="pending">Pending</option>
-            <option value="in_progress">In Progress</option>
-          </select>
-          <select
             value={app.adminDraftAssigneeId}
             onChange={(event) => app.setAdminDraftAssigneeId(event.target.value)}
             aria-label="Assign to user"

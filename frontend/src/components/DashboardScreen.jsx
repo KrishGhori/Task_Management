@@ -80,15 +80,7 @@ const DashboardScreen = ({ app }) => (
               <option value="medium">Medium</option>
               <option value="high">High</option>
             </select>
-            <select
-              value={app.draftStatus}
-              onChange={(event) => app.setDraftStatus(event.target.value)}
-              aria-label="Status"
-            >
-              <option value="pending">Pending</option>
-              <option value="in_progress">In Progress</option>
-              <option value="completed">Completed</option>
-            </select>
+            {/* Admin should not set status when creating a task; backend defaults will apply */}
             <select
               value={app.draftAssigneeId}
               onChange={(event) => app.setDraftAssigneeId(event.target.value)}
@@ -207,11 +199,13 @@ const DashboardScreen = ({ app }) => (
                       <option value="medium">Medium</option>
                       <option value="high">High</option>
                     </select>
-                    <select value={app.editingStatus} onChange={(event) => app.setEditingStatus(event.target.value)}>
-                      <option value="pending">Pending</option>
-                      <option value="in_progress">In Progress</option>
-                      <option value="completed">Completed</option>
-                    </select>
+                    {!app.isAdmin ? (
+                      <select value={app.editingStatus} onChange={(event) => app.setEditingStatus(event.target.value)}>
+                        <option value="pending">Pending</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="completed">Completed</option>
+                      </select>
+                    ) : null}
                     {app.isAdmin ? (
                       <select
                         value={app.editingAssigneeId}

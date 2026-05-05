@@ -54,6 +54,12 @@ export const createTask = async (req, res) => {
     return
   }
 
+  // Admins must assign a task to an employee when creating it
+  if (req.user.role === 'admin' && (normalizedAssigneeId === undefined || normalizedAssigneeId === null)) {
+    res.status(400).json({ message: 'Admins must assign tasks to an employee.' })
+    return
+  }
+
   if (normalizedAssigneeId !== undefined && req.user.role !== 'admin') {
     res.status(403).json({ message: 'Only admins can assign tasks.' })
     return
