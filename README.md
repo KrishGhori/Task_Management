@@ -31,9 +31,9 @@ Full-stack task manager built with React + Vite (frontend) and Express + MongoDB
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 
 - MongoDB (local or Atlas)
-- npm or yarn
+- npm
 
 ### Installation
 
@@ -177,12 +177,6 @@ npm run build      - Production build
 npm run lint       - Run ESLint
 ```
 
-## Browser Support
-
-- Chrome/Edge: Latest 2 versions
-- Firefox: Latest 2 versions
-- Safari: Latest 2 versions
-- Mobile browsers (iOS Safari, Chrome Mobile)
 
 ## License
 
